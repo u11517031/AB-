@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>幾 A 幾 B - 雲端代號版 (版本三)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-100 min-h-screen text-slate-800 p-4">
+  <div class="max-w-2xl mx-auto space-y-4">
+    
+    <!-- 標題與版面 -->
+    <header class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 text-center">
+      <h1 class="text-2xl font-bold text-slate-900">幾 A 幾 B 數字猜測</h1>
+      <p class="text-xs text-slate-500 mt-1">版本三：代號雲端存檔與多局續玩</p>
+    </header>
+
+    <!-- 本機開啟警告 -->
+    <div id="localWarning" class="hidden bg-amber-50 border-l-4 border-amber-500 p-4 rounded text-amber-900 text-sm">
+      ⚠️ 檢測到您是用本機瀏覽器開啟此檔案！本版本必須部署到 Google Apps Script 才能連接雲端存檔。
+    </div>
+
+    <!-- 步驟一：代號登入區域 -->
+    <section id="userSection" class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+      <h2 class="text-lg font-bold mb-3">請輸入使用者代號</h2>
+      <div class="flex gap-2">
+        <input type="text" id="userIdInput" placeholder="例如：student01" class="flex-1 px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+        <button onclick="loginUser()" id="loginBtn" class="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg font-medium transition">載入紀錄</button>
+      </div>
+      <p class="text-xs text-slate-400 mt-2">※ 無需密碼。同代號可開啟雲端儲存的舊紀錄與續玩未完成局。</p>
+    </section>
+
+    <!-- 步驟二：遊戲主要控制區 -->
+    <main id="gameSection" class="hidden space-y-4">
+      
+      <!-- 代號列與操作 -->
+      <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex justify-between items-center">
+        <div>
+          <span class="text-xs text-slate-500 block">目前代號</span>
+          <span id="currentUserId" class="font-bold text-indigo-700"></span>
+        </div>
+        <div class="flex gap-2">
+          <button onclick="handleStartNewGame()" id="newGameBtn" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition">＋ 開新局 (保留舊局)</button>
+          <button onclick="logoutUser()" class="bg-slate-200 hover:bg-slate-300 text-slate-700 px-3 py-2 rounded-lg text-sm font-medium transition">切換代號</button>
+        </div>
+      </div>
+
+      <!-- 局數切換 Tab 區 -->
+      <div id="gameTabs" class="flex gap-2 overflow-x-auto pb-1"></div>
+
+      <!-- 目前選取的遊戲內容卡片 -->
+      <div id="activeGameArea" class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-4 hidden">
+        
+        <!-- 狀態與除錯模式控制列 -->
+        <div class="flex justify-between items-center border-b pb-3">
+          <div>
+            <span id="gameTitle" class="text-lg font-bold">第 -- 局</span>
+            <span id="gameStatusBadge" class="ml-2 text-xs px-2.5 py-1 rounded-full font-semibold"></span>
+          </div>
+          <!-- 除錯模式開關 -->
+          <label class="inline-flex items-center cursor-pointer">
+            <input type="checkbox" id="debugToggle" onchange="toggleDebugMode()" class="sr-only peer">
+            <div class="w-9 h-5 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-amber-500"></div>
+            <span class="ml-2 text-xs font-medium text-slate-600">除錯模式</span>
+          </label>
+        </div>
+
+        <!-- 除錯答案顯示 -->
+        <div id="debugBox" class="hidden bg-amber-50 border border-amber-200 p-3 rounded-lg text-center">
+          <span class="text-xs text-amber-800 font-bold block">🐛 除錯模式（顯示當前雲端局答案）</span>
+          <span id="debugAnswer" class="text-xl font-mono font-bold text-amber-900"></span>
+        </div>
+
+        <!-- 訊息提示欄 -->
+        <div id="statusMessage" class="hidden p-3 rounded-lg text-sm text-center"></div>
+
+        <!-- 輸入猜測面板 -->
+        <div id="inputArea" class="space-y-2">
+          <div class="flex gap-2">
+            <input type="text" id="guessInput" maxlength="4" placeholder="輸入4位不重複數字" class="flex-1 px-4 py-2 border rounded-lg font-mono text-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" onkeyup="if(event.key==='Enter') handleGuess()" />
+            <button onclick="handleGuess()" id="guessBtn" class="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg font-medium transition">猜看看並儲存</button>
+          </div>
+          <p class="text-xs text-slate-400">提示：輸入四個不重複數字（例如 0123），有效猜測將自動同步至雲端。</p>
+        </div>
+
+        <!-- 本局歷史歷程表格 -->
+        <div>
+          <h3 class="text-sm font-bold text-slate-700 mb-2">本局猜測歷程</h3>
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm text-left border-collapse">
+              <thead>
+                <tr class="bg-slate-50 text-slate-500 border-b">
+                  <th class="py-2 px-3">次序</th>
+                  <th class="py-2 px-3">猜測數字</th>
+                  <th class="py-2 px-3">判定結果</th>
+                  <th class="py-2 px-3">時間</th>
+                </tr>
+              </thead>
+              <tbody id="historyTableBody" class="divide-y divide-slate-100 font-mono">
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+
+    </main>
+  </div>
+
+  <script>
+    let currentUserId = '';
+    let gamesList = [];
+    let currentGameId = null;
+
+    // 檢查是否在大氣（本機環境）開啟
+    window.onload = function() {
+      if (typeof google === 'undefined' || !google.script || !google.script.run) {
+        document.getElementById('localWarning').classList.remove('hidden');
+      }
+    };
+
+    // 1. 載入代號
+    function loginUser() {
+      const input = document.getElementById('userIdInput').value.trim();
+      if (!input) {
+        alert('請輸入有效的代號');
+        return;
+      }
+      currentUserId = input.toLowerCase();
+      document.getElementById('loginBtn').disabled = true;
+      document.getElementById('loginBtn').innerText = '讀取中...';
+
+      google.script.run
+        .withSuccessHandler(onUserLoaded)
+        .withFailureHandler(onApiError)
+        .getGamesByUserId(currentUserId);
+    }
+
+    function onUserLoaded(res) {
+      document.getElementById('loginBtn').disabled = false;
+      document.getElementById('loginBtn').innerText = '載入紀錄';
+
+      if (!res.success) {
+        alert('讀取失敗：' + res.message);
+        return;
+      }
+
+      gamesList = res.games || [];
+      document.getElementById('currentUserId').innerText = currentUserId;
+      document.getElementById('userSection').classList.add('hidden');
+      document.getElementById('gameSection').classList.remove('hidden');
+
+      if (gamesList.length === 0) {
+        document.getElementById('activeGameArea').classList.add('hidden');
+        renderTabs();
+        showMessage('此代號沒有紀錄，請點擊「開新局」開始第一局。', 'info');
+      } else {
+        renderTabs();
+        // 預設選擇最新的未完成局，若無則選最新的局
+        const unfinished = gamesList.filter(g => g.status === '未完成');
+        if (unfinished.length > 0) {
+          selectGame(unfinished[unfinished.length - 1].gameId);
+        } else {
+          selectGame(gamesList[gamesList.length - 1].gameId);
+        }
+      }
+    }
+
+    // 2. 切換/顯示遊戲 Tabs
+    function renderTabs() {
+      const tabsContainer = document.getElementById('gameTabs');
+      tabsContainer.innerHTML = '';
+
+      gamesList.forEach(g => {
+        const btn = document.createElement('button');
+        const isActive = g.gameId === currentGameId;
+        const statusText = g.status === '已猜對' ? '✓' : '…';
+        
+        btn.className = `px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition flex items-center gap-1 ${
+          isActive 
+            ? 'bg-indigo-600 text-white shadow-sm' 
+            : 'bg-white text-slate-600 hover:bg-slate-200 border border-slate-200'
+        }`;
+        
+        btn.innerText = `第 ${g.gameNumber} 局 [${statusText}]`;
+        btn.onclick = () => selectGame(g.gameId);
+        tabsContainer.appendChild(btn);
+      });
+    }
+
+    // 3. 切換目前的局
+    function selectGame(gameId) {
+      currentGameId = gameId;
+      renderTabs();
+
+      const game = gamesList.find(g => g.gameId === currentGameId);
+      if (!game) return;
+
+      document.getElementById('activeGameArea').classList.remove('hidden');
+      document.getElementById('gameTitle').innerText = `第 ${game.gameNumber} 局`;
+
+      // 重設除錯模式為關閉
+      document.getElementById('debugToggle').checked = false;
+      document.getElementById('debugBox').classList.add('hidden');
+      document.getElementById('debugAnswer').innerText = game.secret;
+
+      // 狀態標籤
+      const badge = document.getElementById('gameStatusBadge');
+      if (game.status === '已猜對') {
+        badge.innerText = '已猜對';
+        badge.className = 'ml-2 text-xs px-2.5 py-1 rounded-full font-semibold bg-emerald-100 text-emerald-800';
+        document.getElementById('inputArea').classList.add('hidden');
+        showMessage('本局已經完成猜對 (4A0B)，無法繼續猜測。', 'success');
+      } else {
+        badge.innerText = '進行中 (未完成)';
+        badge.className = 'ml-2 text-xs px-2.5 py-1 rounded-full font-semibold bg-amber-100 text-amber-800';
+        document.getElementById('inputArea').classList.remove('hidden');
+        hideMessage();
+      }
+
+      renderHistoryTable(game.history);
+    }
+
+    // 4. 開新局
+    function handleStartNewGame() {
+      const btn = document.getElementById('newGameBtn');
+      btn.disabled = true;
+      btn.innerText = '建立中...';
+
+      google.script.run
+        .withSuccessHandler(res => {
+          btn.disabled = false;
+          btn.innerText = '＋ 開新局 (保留舊局)';
+          if (res.success) {
+            gamesList.push(res.game);
+            selectGame(res.game.gameId);
+            showMessage('新局已建立並成功存至雲端！', 'success');
+          } else {
+            alert('開新局失敗：' + res.message);
+          }
+        })
+        .withFailureHandler(onApiError)
+        .startNewGame(currentUserId);
+    }
+
+    // 5. 送出猜測
+    function handleGuess() {
+      const inputEl = document.getElementById('guessInput');
+      const val = inputEl.value.trim();
+
+      if (!/^\d{4}$/.test(val)) {
+        showMessage('請輸入恰好四位數字（格式需為 4 位數字，如 0123）', 'error');
+        return;
+      }
+      if (new Set(val.split('')).size !== 4) {
+        showMessage('數字不能重複！請輸入 4 個不重複數字', 'error');
+        return;
+      }
+
+      const guessBtn = document.getElementById('guessBtn');
+      guessBtn.disabled = true;
+      guessBtn.innerText = '儲存中...';
+
+      google.script.run
+        .withSuccessHandler(res => {
+          guessBtn.disabled = false;
+          guessBtn.innerText = '猜看看並儲存';
+          inputEl.value = '';
+
+          if (res.success) {
+            // 更新本地快取
+            const idx = gamesList.findIndex(g => g.gameId === currentGameId);
+            if (idx !== -1) {
+              gamesList[idx] = res.game;
+            }
+            selectGame(currentGameId);
+
+            if (res.game.status === '已猜對') {
+              showMessage(' 🎉 恭喜答對！獲得 4A0B！本局已完成並儲存。', 'success');
+            } else {
+              showMessage(`已儲存！猜測結果：${res.lastResult.result}`, 'info');
+            }
+          } else {
+            showMessage(res.message, 'error');
+          }
+        })
+        .withFailureHandler(onApiError)
+        .submitGuess(currentUserId, currentGameId, val);
+    }
+
+    // 6. 切換除錯模式
+    function toggleDebugMode() {
+      const checked = document.getElementById('debugToggle').checked;
+      const debugBox = document.getElementById('debugBox');
+      if (checked) {
+        debugBox.classList.remove('hidden');
+      } else {
+        debugBox.classList.add('hidden');
+      }
+    }
+
+    // 繪製歷程表格
+    function renderHistoryTable(history) {
+      const tbody = document.getElementById('historyTableBody');
+      tbody.innerHTML = '';
+      if (!history || history.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-slate-400">尚無猜測紀錄</td></tr>';
+        return;
+      }
+
+      history.forEach(item => {
+        const tr = document.createElement('tr');
+        const dateStr = new Date(item.timestamp).toLocaleTimeString();
+        tr.innerHTML = `
+          <td class="py-2 px-3 text-slate-500">${item.attemptNumber}</td>
+          <td class="py-2 px-3 font-bold text-slate-800">${item.guess}</td>
+          <td class="py-2 px-3 font-bold ${item.result === '4A0B' ? 'text-emerald-600' : 'text-indigo-600'}">${item.result}</td>
+          <td class="py-2 px-3 text-xs text-slate-400">${dateStr}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    // 離開切換代號
+    function logoutUser() {
+      currentUserId = '';
+      gamesList = [];
+      currentGameId = null;
+      document.getElementById('userIdInput').value = '';
+      document.getElementById('gameSection').classList.add('hidden');
+      document.getElementById('userSection').classList.remove('hidden');
+    }
+
+    // 通用訊息顯示
+    function showMessage(msg, type) {
+      const el = document.getElementById('statusMessage');
+      el.classList.remove('hidden', 'bg-red-50', 'text-red-700', 'bg-emerald-50', 'text-emerald-700', 'bg-blue-50', 'text-blue-700');
+      
+      if (type === 'error') {
+        el.classList.add('bg-red-50', 'text-red-700');
+      } else if (type === 'success') {
+        el.classList.add('bg-emerald-50', 'text-emerald-700');
+      } else {
+        el.classList.add('bg-blue-50', 'text-blue-700');
+      }
+      el.innerText = msg;
+    }
+
+    function hideMessage() {
+      document.getElementById('statusMessage').classList.add('hidden');
+    }
+
+    function onApiError(err) {
+      document.getElementById('loginBtn').disabled = false;
+      document.getElementById('loginBtn').innerText = '載入紀錄';
+      document.getElementById('guessBtn').disabled = false;
+      document.getElementById('guessBtn').innerText = '猜看看並儲存';
+      alert('連線雲端發生錯誤：' + err.toString());
+    }
+  </script>
+</body>
+</html>
